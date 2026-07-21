@@ -1,7 +1,10 @@
 from collections.abc import Generator
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -85,3 +88,37 @@ def test_list_incidents_returns_newest_first() -> None:
     assert len(payload) == 2
     assert payload[0]["title"] == "Newer incident"
     assert payload[1]["title"] == "Older incident"
+
+
+def test_list_incidents_returns_503_on_db_failure() -> None:
+    """Route must return 503 when a SQLAlchemy error occurs during SELECT."""
+    broken_session = MagicMock(spec=Session)
+    broken_session.scalars.side_effect = OperationalError("SELECT", {}, Exception("connection lost"))
+
+    app.dependency_overrides[get_db_session] = lambda: broken_session
+    response = client.get("/api/v1/incidents")
+    app.dependency_overrides[get_db_session] = override_get_db_session
+
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"].lower()
+
+
+def test_create_incident_returns_503_on_db_failure() -> None:
+    """Route must return 503 and not expose raw traceback when commit fails."""
+    broken_session = MagicMock(spec=Session)
+    broken_session.commit.side_effect = OperationalError("INSERT", {}, Exception("connection lost"))
+
+    app.dependency_overrides[get_db_session] = lambda: broken_session
+    response = client.post(
+        "/api/v1/incidents",
+        json={
+            "title": "DB failure test incident",
+            "severity": "sev-3",
+            "status": "open",
+            "affected_service": "backend",
+        },
+    )
+    app.dependency_overrides[get_db_session] = override_get_db_session
+
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"].lower()
