@@ -19,7 +19,7 @@ class IncidentStatus(StrEnum):
     RESOLVED = "resolved"
 
 
-class IncidentCreate(BaseModel):
+class IncidentCreate(BaseModel): #Data coming into your application when someone creates an incident.
     title: str = Field(min_length=3, max_length=255)
     description: str | None = Field(default=None, max_length=5000)
     severity: IncidentSeverity = IncidentSeverity.SEV_3
@@ -27,7 +27,7 @@ class IncidentCreate(BaseModel):
     affected_service: str = Field(default="backend", min_length=2, max_length=128)
 
 
-class IncidentRead(BaseModel):
+class IncidentRead(BaseModel): #Data going out of your application when you return an incident to the client.
     id: int
     title: str
     description: str | None
