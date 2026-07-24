@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cluster-reactor-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-cluster_reactor}
+      POSTGRES_USER: ${DB_USER:-cluster_reactor}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-cluster_reactor}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-cluster_reactor} -d ${DB_NAME:-cluster_reactor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: cluster-reactor-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_NAME: ${APP_NAME:-cluster-reactor-backend}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      ENVIRONMENT: ${ENVIRONMENT:-docker}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-cluster_reactor}
+      DB_USER: ${DB_USER:-cluster_reactor}
+      DB_PASSWORD: ${DB_PASSWORD:-cluster_reactor}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
+      DB_POOL_PRE_PING: ${DB_POOL_PRE_PING:-true}
+      DB_AUTO_CREATE_TABLES: ${DB_AUTO_CREATE_TABLES:-true}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: cluster-reactor-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      CLUSTER_REACTOR_API_URL: http://backend:8000
+      CLUSTER_REACTOR_API_TIMEOUT: ${CLUSTER_REACTOR_API_TIMEOUT:-5}
+    ports:
+      - "8501:8501"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8501/_stcore/health').read()"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres_data:
