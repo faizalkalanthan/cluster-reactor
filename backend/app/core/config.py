@@ -14,7 +14,9 @@ class Settings(BaseSettings):
     db_max_overflow: int = 10
     db_pool_timeout: int = 30
     db_pool_pre_ping: bool = True
-    db_auto_create_tables: bool = False
+    db_auto_create_tables: bool = True
+    jwt_secret_key: str = "cluster-reactor-dev-secret-change-me"
+    jwt_algorithm: str = "HS256"
 
     model_config = SettingsConfigDict(
         env_file=".env",

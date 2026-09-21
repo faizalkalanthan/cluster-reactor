@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 import sys
 
@@ -13,17 +13,28 @@ if str(REPO_ROOT) not in sys.path:
 
 from frontend.api import BACKEND_BASE_URL
 from frontend.api import create_incident
+from frontend.api import create_tenant
+from frontend.api import delete_tenant
 from frontend.api import get_health
 from frontend.api import get_readiness
 from frontend.api import get_root_status
 from frontend.api import get_system_status
 from frontend.api import list_incidents
+from frontend.api import list_tenants
+from frontend.api import login
 from frontend.ui import inject_global_styles
 from frontend.ui import render_incidents_table
 from frontend.ui import render_metric_card
 from frontend.ui import render_page_header
 from frontend.ui import render_severity_legend
 from frontend.ui import render_status_banner
+
+
+ROLE_PERMISSIONS = {
+    "admin": ["Read incidents", "Write incidents", "Manage tenants", "Manage users"],
+    "writer": ["Read incidents", "Write incidents"],
+    "reader": ["Read incidents"],
+}
 
 
 st.set_page_config(
@@ -36,6 +47,15 @@ st.set_page_config(
 inject_global_styles()
 
 
+def resolve_user_role(email: str) -> str:
+    normalized = email.lower()
+    if "admin" in normalized:
+        return "admin"
+    if "writer" in normalized:
+        return "writer"
+    return "reader"
+
+
 def safe_call(callable_obj, fallback):
     try:
         return callable_obj()
@@ -44,7 +64,39 @@ def safe_call(callable_obj, fallback):
         return fallback
 
 
-def load_dashboard_state() -> tuple[dict[str, object], dict[str, object], dict[str, object], list[dict[str, object]]]:
+def render_role_summary() -> None:
+    role = st.session_state.get("user_role", "reader")
+    permissions = ROLE_PERMISSIONS.get(role, ROLE_PERMISSIONS["reader"])
+    st.markdown(
+        f"""
+        <div style="margin-top: 0.5rem; margin-bottom: 0.75rem; padding: 0.9rem 1rem; border: 1px solid rgba(103, 232, 249, 0.18); border-radius: 14px; background: rgba(15,23,42,0.9);">
+            <div style="font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase; color: #67e8f9;">Session</div>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-top: 0.45rem;">
+                <div>
+                    <div style="font-size: 1.08rem; font-weight: 700; color: #f8fafc;">{role.title()}</div>
+                    <div style="font-size: 0.75rem; color: #94a3b8;">{st.session_state.get('tenant_slug', 'clusterreactor')}</div>
+                </div>
+                <span style="display:inline-flex; align-items:center; gap:0.35rem; border-radius:999px; padding:0.38rem 0.7rem; font-size:0.68rem; letter-spacing:0.12em; background: rgba(34,211,238,0.12); color: #a5f3fc; border: 1px solid rgba(34,211,238,0.2); text-transform: uppercase;">{role}</span>
+            </div>
+            <div style="margin-top: 0.8rem; display:flex; flex-wrap:wrap; gap:0.45rem;">
+                {''.join(f'<span style="display:inline-flex; padding:0.3rem 0.6rem; border-radius:999px; background: rgba(148,163,184,0.08); color: #e2e8f0; font-size: 0.7rem; border:1px solid rgba(148,163,184,0.12);">{p}</span>' for p in permissions)}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def normalize_login_username(raw_username: str) -> str:
+    username = (raw_username or "").strip().lower()
+    if not username:
+        return ""
+    if "@" in username:
+        username = username.split("@", 1)[0]
+    return username
+
+
+def load_dashboard_state() -> tuple[Mapping[str, object], Mapping[str, object], Mapping[str, object], Sequence[Mapping[str, object]]]:
     root_status = safe_call(get_root_status, {"service": "unavailable", "status": "down", "version": "n/a"})
     health_status = safe_call(get_health, {"status": "down"})
     readiness_status = safe_call(
@@ -53,6 +105,115 @@ def load_dashboard_state() -> tuple[dict[str, object], dict[str, object], dict[s
     )
     incidents = safe_call(list_incidents, [])
     return root_status, health_status, readiness_status, incidents
+
+
+def render_login_page() -> None:
+    st.markdown(
+        """
+        <style>
+            .stApp > div:first-child {
+                padding-top: 0 !important;
+            }
+            .block-container {
+                padding-top: 0 !important;
+                padding-bottom: 0 !important;
+            }
+            .login-shell {
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding-top: 0;
+                margin-top: 0;
+                background: radial-gradient(circle at top, rgba(14,165,233,0.16), transparent 32%), #020817;
+            }
+            .login-card {
+                width: min(100%, 460px);
+                background: rgba(15, 23, 42, 0.9);
+                border: 1px solid rgba(148,163,184,0.2);
+                border-radius: 24px;
+                padding: 2rem 1.5rem;
+                margin-top: 0;
+                box-shadow: 0 18px 42px rgba(8, 47, 73, 0.35);
+            }
+            .tenant-brand {
+                width: 52px;
+                height: 52px;
+                margin: 0 auto 1rem;
+                border-radius: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: linear-gradient(135deg, rgba(34,211,238,0.22), rgba(59,130,246,0.28));
+                color: #67e8f9;
+                font-size: 1.5rem;
+                font-weight: 800;
+            }
+            .login-hint {
+                margin-top: 1rem;
+                padding: 0.75rem 0.9rem;
+                border-radius: 12px;
+                border: 1px solid rgba(148,163,184,0.14);
+                background: rgba(15,23,42,0.7);
+                color: #cbd5e1;
+                font-size: 0.78rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.container():
+        st.markdown('<div class="login-shell"><div class="login-card">', unsafe_allow_html=True)
+        st.markdown('<div class="tenant-brand">CR</div>', unsafe_allow_html=True)
+        st.title("Cluster Reactor")
+        st.caption("Login to your tenant workspace")
+
+        with st.form("tenant_login_form"):
+            tenant_slug = "clusterreactor"
+            raw_username = st.text_input("Username", placeholder="admin")
+            password = st.text_input("Password", type="password", placeholder="Enter your password")
+            remember = st.checkbox("Keep me signed in")
+            submitted = st.form_submit_button("Sign in", use_container_width=True)
+
+        if submitted:
+            username = normalize_login_username(raw_username)
+            if not username:
+                st.error("Please enter a username.")
+            else:
+                try:
+                    email = f"{username}@clusterreactor.local"
+                    result = login(tenant_slug=tenant_slug, email=email, password=password)
+                    st.session_state["access_token"] = result["access_token"]
+                    st.session_state["tenant_slug"] = tenant_slug
+                    st.session_state["user_role"] = resolve_user_role(username)
+                    st.success("Login successful")
+                    st.rerun()
+                except requests.HTTPError as exc:
+                    detail = ""
+                    try:
+                        payload = exc.response.json()
+                        if isinstance(payload, dict):
+                            detail = payload.get("detail", "")
+                    except ValueError:
+                        detail = ""
+                    if detail:
+                        st.error(f"Login failed: {detail}")
+                    else:
+                        st.error(f"Login failed: {exc}")
+                except requests.RequestException as exc:
+                    st.error(f"Login failed: {exc}")
+
+        st.markdown(
+            """
+            <div class="login-hint">
+                Demo users: admin / writer / reader<br>
+                Passwords: Admin123!, Writer123!, Reader123!
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 def render_dashboard() -> None:
@@ -163,23 +324,144 @@ def render_service_health() -> None:
         st.json(system_status)
 
 
-with st.sidebar:
-    st.markdown("## ⚛️ Cluster Reactor")
-    st.caption("Kubernetes-first reliability learning console")
-    page = st.radio(
-        "Navigate",
-        ["Dashboard", "Incident Console", "Service Health"],
-        label_visibility="collapsed",
+def render_tenants_admin() -> None:
+    render_page_header("Tenant Administration", "Create and manage tenant organizations with scoped access.")
+    token = st.session_state.get("access_token")
+    if not token:
+        st.warning("Please log in first.")
+        return
+
+    tenants = safe_call(lambda: list_tenants(token), [])
+
+    st.markdown(
+        """
+        <div style="margin: 1rem 0 1.5rem; padding: 0.9rem 1rem; border-radius: 16px; border: 1px solid rgba(103, 232, 249, 0.18); background: rgba(8, 47, 73, 0.16); color: #dbeafe;">
+            <strong style="color: #67e8f9;">Access model</strong><br>
+            Admins can manage tenants and users. Writers can create and update incidents. Readers can view incidents only.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    st.markdown("---")
-    st.caption(f"API target: {BACKEND_BASE_URL}")
-    if "cluster_reactor_last_error" in st.session_state:
-        st.warning(st.session_state["cluster_reactor_last_error"])
+
+    with st.form("tenant-create-form"):
+        name = st.text_input("Tenant name")
+        slug = st.text_input("Slug")
+        domain = st.text_input("Domain (optional)")
+        is_active = st.checkbox("Active", value=True)
+        submitted = st.form_submit_button("Create tenant", use_container_width=True)
+
+    if submitted and name.strip() and slug.strip():
+        try:
+            create_tenant(
+                token,
+                {"name": name.strip(), "slug": slug.strip(), "domain": domain.strip() or None, "is_active": is_active},
+            )
+            st.success("Tenant created")
+            st.rerun()
+        except requests.RequestException as exc:
+            st.error(f"Failed to create tenant: {exc}")
+
+    if tenants:
+        st.subheader("Existing tenants")
+        for tenant in tenants:
+            status_label = "Active" if tenant.get("is_active") else "Inactive"
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div style="margin-top: 0.8rem; padding: 1rem 1.1rem; border-radius: 16px; background: rgba(15,23,42,0.9); border: 1px solid rgba(148,163,184,0.15);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem; flex-wrap:wrap;">
+                            <div>
+                                <div style="font-size: 1.06rem; font-weight:700; color: #f8fafc;">{tenant.get('name')}</div>
+                                <div style="font-size: 0.76rem; color: #94a3b8;">{tenant.get('slug')} • {tenant.get('domain') or 'no domain'}</div>
+                            </div>
+                            <span style="display:inline-flex; padding:0.32rem 0.7rem; border-radius:999px; font-size:0.7rem; text-transform: uppercase; letter-spacing:0.08em; background: rgba(34,197,94,0.14); color:#bbf7d0; border: 1px solid rgba(34,197,94,0.25);">{status_label}</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                col_a, col_b = st.columns([3, 1])
+                with col_a:
+                    st.caption("Permissions: Admin • Writer • Reader")
+                with col_b:
+                    if st.button("Delete", key=f"delete-tenant-{tenant['id']}"):
+                        try:
+                            delete_tenant(token, int(tenant["id"]))
+                            st.success("Tenant deleted")
+                            st.rerun()
+                        except requests.RequestException as exc:
+                            st.error(f"Could not delete tenant: {exc}")
 
 
-if page == "Dashboard":
-    render_dashboard()
-elif page == "Incident Console":
-    render_incident_console()
+def render_user_management() -> None:
+    render_page_header("User Management", "Assign roles and control tenant memberships for each user.")
+    role = st.session_state.get("user_role", "reader")
+    if role != "admin":
+        st.warning("Only administrators can manage users.")
+        return
+
+    st.markdown(
+        """
+        <div style="margin: 1rem 0 1.5rem; padding: 0.9rem 1rem; border-radius: 16px; border: 1px solid rgba(103, 232, 249, 0.18); background: rgba(8, 47, 73, 0.16); color: #dbeafe;">
+            <strong style="color: #67e8f9;">Role controls</strong><br>
+            Admins can manage tenants and users. Writers can create and update incidents. Readers can only view incidents.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    users = [
+        {"name": "Cluster Reactor Admin", "email": "admin@clusterreactor.local", "role": "admin"},
+        {"name": "Cluster Reactor Writer", "email": "writer@clusterreactor.local", "role": "writer"},
+        {"name": "Cluster Reactor Reader", "email": "reader@clusterreactor.local", "role": "reader"},
+    ]
+
+    for user in users:
+        col_a, col_b, col_c = st.columns([2, 2, 1.2])
+        with col_a:
+            st.write(f"**{user['name']}**")
+            st.caption(user["email"])
+        with col_b:
+            st.selectbox(
+                "Role",
+                ["reader", "writer", "admin"],
+                index=["reader", "writer", "admin"].index(user["role"]),
+                key=f"role-select-{user['email']}",
+                label_visibility="collapsed",
+            )
+        with col_c:
+            st.button("Save", key=f"save-role-{user['email']}")
+
+
+if "access_token" not in st.session_state:
+    render_login_page()
 else:
-    render_service_health()
+    with st.sidebar:
+        st.markdown("## ⚛️ Cluster Reactor")
+        render_role_summary()
+        st.caption(f"Workspace: {st.session_state.get('tenant_slug', 'clusterreactor')}")
+        page = st.radio(
+            "Navigate",
+            ["Dashboard", "Incident Console", "Service Health", "Tenant Administration", "User Management"],
+            label_visibility="collapsed",
+        )
+        st.markdown("---")
+        st.caption(f"API target: {BACKEND_BASE_URL}")
+        if st.button("Log out"):
+            st.session_state.pop("access_token", None)
+            st.session_state.pop("tenant_slug", None)
+            st.session_state.pop("user_role", None)
+            st.rerun()
+        if "cluster_reactor_last_error" in st.session_state:
+            st.warning(st.session_state["cluster_reactor_last_error"])
+
+    if page == "Dashboard":
+        render_dashboard()
+    elif page == "Incident Console":
+        render_incident_console()
+    elif page == "Tenant Administration":
+        render_tenants_admin()
+    elif page == "User Management":
+        render_user_management()
+    else:
+        render_service_health()

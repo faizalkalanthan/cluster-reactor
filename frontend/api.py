@@ -11,16 +11,27 @@ BACKEND_BASE_URL = os.getenv("CLUSTER_REACTOR_API_URL", "http://127.0.0.1:8000")
 REQUEST_TIMEOUT_SECONDS = float(os.getenv("CLUSTER_REACTOR_API_TIMEOUT", "5"))
 
 
-def _request(method: str, path: str, payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _request(method: str, path: str, payload: Mapping[str, Any] | None = None, token: str | None = None) -> dict[str, Any]:
     url = f"{BACKEND_BASE_URL.rstrip('/')}{path}"
+    headers = {}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     response = requests.request(
         method=method,
         url=url,
         json=dict(payload) if payload is not None else None,
+        headers=headers,
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    return response.json()
+    if response.content:
+        try:
+            return response.json()
+        except ValueError:
+            return {}
+    return {}
 
 
 def get_root_status() -> dict[str, Any]:
@@ -48,3 +59,30 @@ def list_incidents() -> list[dict[str, Any]]:
 
 def create_incident(payload: Mapping[str, Any]) -> dict[str, Any]:
     return _request("POST", "/api/v1/incidents", payload=payload)
+
+
+def login(tenant_slug: str, email: str, password: str) -> dict[str, Any]:
+    return _request(
+        "POST",
+        "/api/v1/auth/login",
+        payload={"tenant_slug": tenant_slug or None, "email": email, "password": password},
+    )
+
+
+def list_tenants(token: str) -> list[dict[str, Any]]:
+    response = _request("GET", "/api/v1/tenants", token=token)
+    if not isinstance(response, list):
+        raise TypeError("Expected a list of tenants from the backend API")
+    return response
+
+
+def create_tenant(token: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _request("POST", "/api/v1/tenants", payload=payload, token=token)
+
+
+def update_tenant(token: str, tenant_id: int, payload: Mapping[str, Any]) -> dict[str, Any]:
+    return _request("PUT", f"/api/v1/tenants/{tenant_id}", payload=payload, token=token)
+
+
+def delete_tenant(token: str, tenant_id: int) -> None:
+    _request("DELETE", f"/api/v1/tenants/{tenant_id}", token=token)
