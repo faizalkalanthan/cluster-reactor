@@ -44,6 +44,20 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Remove top padding and spacing
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 0rem !important;
+            gap: 0rem !important;
+        }
+        [data-testid="stVerticalBlock"] {
+            gap: 0rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 inject_global_styles()
 
 
@@ -111,20 +125,32 @@ def render_login_page() -> None:
     st.markdown(
         """
         <style>
-            .stApp > div:first-child {
-                padding-top: 0 !important;
+            html, body, [data-testid="stAppViewContainer"], [data-testid="stMainBlockContainer"], section.main, section.main > div.block-container {
+                margin: 0 !important;
+                padding: 0 !important;
+                min-height: 100vh !important;
+                width: 100vw !important;
+                overflow: hidden !important;
+                background: #020817 !important;
             }
-            .block-container {
-                padding-top: 0 !important;
-                padding-bottom: 0 !important;
+            [data-testid="stVerticalBlock"] {
+                gap: 0 !important;
+                padding: 0 !important;
+            }
+            header, [data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu {
+                display: none !important;
+            }
+            .stApp {
+                background: #020817 !important;
             }
             .login-shell {
-                min-height: 100vh;
+                position: fixed;
+                inset: 0;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                padding-top: 0;
-                margin-top: 0;
+                padding: 0;
+                margin: 0;
                 background: radial-gradient(circle at top, rgba(14,165,233,0.16), transparent 32%), #020817;
             }
             .login-card {
@@ -132,14 +158,39 @@ def render_login_page() -> None:
                 background: rgba(15, 23, 42, 0.9);
                 border: 1px solid rgba(148,163,184,0.2);
                 border-radius: 24px;
-                padding: 2rem 1.5rem;
-                margin-top: 0;
+                margin: 0;
                 box-shadow: 0 18px 42px rgba(8, 47, 73, 0.35);
+                overflow: hidden;
+            }
+            div[data-testid="stForm"] {
+                max-width: 360px;
+                margin: 0 auto;
+            }
+            div[data-testid="stForm"] > form {
+                padding-top: 0.1rem;
+            }
+            div[data-testid="stTextInput"],
+            div[data-testid="stPassword"] {
+                max-width: 360px;
+                margin: 0 auto 0.25rem;
+            }
+            div[data-testid="stTextInput"] input,
+            div[data-testid="stPassword"] input {
+                max-width: 360px;
+            }
+            div[data-testid="stCheckbox"] {
+                margin: 0.45rem 0 0.2rem;
+            }
+            div[data-testid="stFormSubmitButton"] {
+                margin-top: 0.85rem;
+            }
+            div[data-testid="stFormSubmitButton"] button {
+                width: 100%;
             }
             .tenant-brand {
                 width: 52px;
                 height: 52px;
-                margin: 0 auto 1rem;
+                margin: 0.55cm auto 1.1rem;
                 border-radius: 16px;
                 display: flex;
                 align-items: center;
@@ -149,10 +200,24 @@ def render_login_page() -> None:
                 font-size: 1.5rem;
                 font-weight: 800;
             }
+            .login-title {
+                text-align: center;
+                margin: 0 0 0.85rem;
+                color: #f8fafc;
+                font-size: 2rem;
+                line-height: 1.05;
+                font-weight: 750;
+            }
+            .login-subtitle {
+                text-align: center;
+                color: #94a3b8;
+                margin: 0 0 1.55rem;
+                font-size: 0.90rem;
+            }
             .login-hint {
-                margin-top: 1rem;
-                padding: 0.75rem 0.9rem;
-                border-radius: 12px;
+                margin-top: 17rem;
+                padding: 0.55rem 0.9rem;
+                border-radius: 10px;
                 border: 1px solid rgba(148,163,184,0.14);
                 background: rgba(15,23,42,0.7);
                 color: #cbd5e1;
@@ -163,57 +228,56 @@ def render_login_page() -> None:
         unsafe_allow_html=True,
     )
 
-    with st.container():
-        st.markdown('<div class="login-shell"><div class="login-card">', unsafe_allow_html=True)
-        st.markdown('<div class="tenant-brand">CR</div>', unsafe_allow_html=True)
-        st.title("Cluster Reactor")
-        st.caption("Login to your tenant workspace")
+    st.markdown('<div class="login-shell"><div class="login-card">', unsafe_allow_html=True)
+    st.markdown('<div class="tenant-brand">CR</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-title">Cluster Reactor</div>', unsafe_allow_html=True)
+    st.markdown('<div class="login-subtitle">Login to your tenant workspace</div>', unsafe_allow_html=True)
 
-        with st.form("tenant_login_form"):
-            tenant_slug = "clusterreactor"
-            raw_username = st.text_input("Username", placeholder="admin")
-            password = st.text_input("Password", type="password", placeholder="Enter your password")
-            remember = st.checkbox("Keep me signed in")
-            submitted = st.form_submit_button("Sign in", use_container_width=True)
+    with st.form("tenant_login_form"):
+        tenant_slug = "clusterreactor"
+        raw_username = st.text_input("Username", placeholder="admin")
+        password = st.text_input("Password", type="password", placeholder="Enter your password")
+        remember = st.checkbox("Keep me signed in")
+        submitted = st.form_submit_button("Sign in", use_container_width=True)
 
-        if submitted:
-            username = normalize_login_username(raw_username)
-            if not username:
-                st.error("Please enter a username.")
-            else:
+    if submitted:
+        username = normalize_login_username(raw_username)
+        if not username:
+            st.error("Please enter a username.")
+        else:
+            try:
+                email = f"{username}@clusterreactor.local"
+                result = login(tenant_slug=tenant_slug, email=email, password=password)
+                st.session_state["access_token"] = result["access_token"]
+                st.session_state["tenant_slug"] = tenant_slug
+                st.session_state["user_role"] = resolve_user_role(username)
+                st.success("Login successful")
+                st.rerun()
+            except requests.HTTPError as exc:
+                detail = ""
                 try:
-                    email = f"{username}@clusterreactor.local"
-                    result = login(tenant_slug=tenant_slug, email=email, password=password)
-                    st.session_state["access_token"] = result["access_token"]
-                    st.session_state["tenant_slug"] = tenant_slug
-                    st.session_state["user_role"] = resolve_user_role(username)
-                    st.success("Login successful")
-                    st.rerun()
-                except requests.HTTPError as exc:
+                    payload = exc.response.json()
+                    if isinstance(payload, dict):
+                        detail = payload.get("detail", "")
+                except ValueError:
                     detail = ""
-                    try:
-                        payload = exc.response.json()
-                        if isinstance(payload, dict):
-                            detail = payload.get("detail", "")
-                    except ValueError:
-                        detail = ""
-                    if detail:
-                        st.error(f"Login failed: {detail}")
-                    else:
-                        st.error(f"Login failed: {exc}")
-                except requests.RequestException as exc:
+                if detail:
+                    st.error(f"Login failed: {detail}")
+                else:
                     st.error(f"Login failed: {exc}")
+            except requests.RequestException as exc:
+                st.error(f"Login failed: {exc}")
 
-        st.markdown(
-            """
-            <div class="login-hint">
-                Demo users: admin / writer / reader<br>
-                Passwords: Admin123!, Writer123!, Reader123!
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="login-hint">
+            Demo users: admin / writer / reader<br>
+            Passwords: Admin123!, Writer123!, Reader123!
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 def render_dashboard() -> None:
