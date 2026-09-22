@@ -172,7 +172,7 @@ def render_login_page() -> None:
             div[data-testid="stTextInput"],
             div[data-testid="stPassword"] {
                 max-width: 360px;
-                margin: 0 auto 0.25rem;
+                margin: 0 auto 0.15rem;
             }
             div[data-testid="stTextInput"] input,
             div[data-testid="stPassword"] input {
@@ -182,27 +182,27 @@ def render_login_page() -> None:
                 margin: 0.45rem 0 0.2rem;
             }
             div[data-testid="stFormSubmitButton"] {
-                margin-top: 0.85rem;
+                margin-top: 0.1rem;
             }
             div[data-testid="stFormSubmitButton"] button {
                 width: 100%;
             }
-            .tenant-brand {
+            .tenant-brand { 
                 width: 52px;
                 height: 52px;
-                margin: 0.55cm auto 1.1rem;
+                margin: 0.45cm auto 1.1rem;
                 border-radius: 16px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 background: linear-gradient(135deg, rgba(34,211,238,0.22), rgba(59,130,246,0.28));
                 color: #67e8f9;
-                font-size: 1.5rem;
+                font-size: 1.5rem; #clusterreactor-header logo
                 font-weight: 800;
             }
             .login-title {
                 text-align: center;
-                margin: 0 0 0.85rem;
+                margin: 0 0 1.0rem; #space between title and subtitle 
                 color: #f8fafc;
                 font-size: 2rem;
                 line-height: 1.05;
@@ -211,14 +211,14 @@ def render_login_page() -> None:
             .login-subtitle {
                 text-align: center;
                 color: #94a3b8;
-                margin: 0 0 1.55rem;
-                font-size: 0.90rem;
+                margin: 0 0 2.55rem;
+                font-size: 0.90rem; #Login to your tenant workspace subtitle
             }
             .login-hint {
-                margin-top: 17rem;
-                padding: 0.55rem 0.9rem;
+                margin-top: 20rem;
+                padding: 0.55rem 0.9rem; #Demo user credentials hint
                 border-radius: 10px;
-                border: 1px solid rgba(148,163,184,0.14);
+                border: 1px solid rgba(148,163,184,0.14); 
                 background: rgba(15,23,42,0.7);
                 color: #cbd5e1;
                 font-size: 0.78rem;

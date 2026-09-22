@@ -1,0 +1,13 @@
+{
+  "valid_tenant": {
+    "name": "Cluster Reactor West",
+    "slug": "cluster-reactor-west",
+    "domain": "west.clusterreactor.local",
+    "is_active": true
+  },
+  "updated_tenant": {
+    "name": "Cluster Reactor West Updated",
+    "domain": "updated.clusterreactor.local",
+    "is_active": true
+  }
+}

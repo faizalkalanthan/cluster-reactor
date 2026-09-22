@@ -1,0 +1,21 @@
+{
+  "valid_incident": {
+    "title": "Database latency spike",
+    "description": "Synthetic incident for API automation.",
+    "severity": "sev-2",
+    "status": "open",
+    "affected_service": "postgresql"
+  },
+  "older_incident": {
+    "title": "Older incident",
+    "severity": "sev-3",
+    "status": "open",
+    "affected_service": "backend"
+  },
+  "newer_incident": {
+    "title": "Newer incident",
+    "severity": "sev-1",
+    "status": "acknowledged",
+    "affected_service": "database"
+  }
+}
